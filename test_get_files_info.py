@@ -10,4 +10,5 @@ def main():
     print("Result for '../' directory:")
     print(get_file_info("calculator", "../"))
 
-main()
+if __name__ == "__main__":
+    main()
