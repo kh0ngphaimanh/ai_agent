@@ -2,8 +2,10 @@ import os
 import argparse
 
 from dotenv import load_dotenv
-from google import genai
+from google import genai    
 from google.genai import types
+from prompts import system_prompt
+from call_function import available_functions, call_function
 
 def main():
     parser = argparse.ArgumentParser(description="Chatbot")
@@ -25,18 +27,42 @@ def main():
     generate_content(client, messages, args.verbose)
 
 def generate_content(client, messages, verbose):
-    respond = client.models.generate_content(
+    response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=messages
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions],
+            system_instruction=system_prompt,
+            temperature=0
+        )
     )
-    if not respond.usage_metadata:
+    if not response.usage_metadata:
         raise RuntimeError("Gemini API response appears to be malformed")
     
+    
+
     if verbose:
-        print(f"Prompt tokens: {respond.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {respond.usage_metadata.candidates_token_count}")
-    print("Response:")
-    print(respond.text)
+        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+    if not response.function_calls:
+        print("Response:")
+        print(response.text)
+        return
+    
+    function_responses = []
+    for function_call in response.function_calls:
+        # print(f"Calling function: {function_call.name}({function_call.args})")
+        function_call_result = call_function(function_call, verbose)
+        if not function_call_result.parts:
+            raise Exception("Error: no non-empty .parts list.")
+        if function_call_result.parts[0].function_response is None:
+            raise Exception("Error: no function response")
+        if function_call_result.parts[0].function_response.response is None:
+            raise Exception("Error: no result")
+        function_responses.append(function_call_result.parts[0])
+        if verbose:
+            print(f"-> {function_call_result.parts[0].function_response.response}")
+
 
 if __name__ == "__main__":
     main()    
